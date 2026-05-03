@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>X86/64up Ultimate Engine · 96 Edition Extended</title>
+  <style>
+    :root {
+      --bg: #0a0c0f;
+      --panel: #121418;
+      --acc: #00a6ff;
+      --boot: #ff4d6a;
+      --text: #dce2e9;
+      --code: #a0f0a0;
+      --border: #2a2f38;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background: var(--panel);
+      padding: 10px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--border);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.7);
+      flex-wrap: wrap;
+    }
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--acc);
+      text-shadow: 0 0 8px rgba(0,166,255,0.5);
+    }
+    .logo span { color: var(--boot); }
+    .badge-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .status-badge {
+      padding: 4px 14px;
+      border-radius: 30px;
+      font-size: 11px;
+      background: #222;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .active-boot {
+      background: var(--boot);
+      color: white;
+      box-shadow: 0 0 15px var(--boot);
+    }
+    button {
+      background: #2a2e36;
+      color: #f0f0f0;
+      border: 1px solid #3e434c;
+      padding: 8px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: 0.3px;
+    }
+    button:hover {
+      background: var(--acc);
+      border-color: var(--acc);
+      color: #000;
+      box-shadow: 0 0 15px rgba(0,166,255,0.5);
+      transform: translateY(-1px);
+    }
+    .btn-dl {
+      background: #00374f;
+      border-color: #0077be;
+    }
+    .btn-dl:hover {
+      background: #0099ff;
+    }
+
+    .workspace {
+      display: flex;
+      flex: 1;
+      padding: 12px;
+      gap: 12px;
+      overflow: hidden;
+    }
+    .column {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      gap: 8px;
+      min-width: 0;
+    }
+    .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #8b95a5;
+      font-weight: 600;
+      margin-left: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    textarea, #viewer {
+      flex: 1;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      padding: 22px;
+      font-size: 14px;
+      line-height: 1.7;
+      outline: none;
+      background: #0b0e12;
+      transition: 0.25s;
+      resize: none;
+      white-space: pre-wrap;
+      overflow-y: auto;
+      font-family: 'Fira Code', monospace;
+    }
+    textarea {
+      color: #c3f0c3;
+      caret-color: #ffffff;
+      box-shadow: inset 0 0 18px rgba(0,0,0,0.7);
+    }
+    textarea:focus {
+      border-color: var(--acc);
+      box-shadow: 0 0 20px rgba(0,166,255,0.3), inset 0 0 10px #000;
+    }
+    #viewer {
+      color: #6cd4ff;
+      background: #020304;
+      box-shadow: inset 0 0 25px #000000;
+      white-space: pre;
+      font-weight: 400;
+    }
+    @media (max-width: 750px) {
+      .workspace { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">X86/64<span>up</span> <small style="font-size: 11px; color: #6b7a8f; font-weight: 400;">v6.0 Ultimate · 96+</small></div>
+  <div class="badge-row">
+    <span id="mTag" class="status-badge">READY</span>
+    <button onclick="copyCode()">📋 複製</button>
+    <button class="btn-dl" onclick="downloadAsm()">💾 下載 o.asm</button>
+  </div>
+</header>
+
+<div class="workspace">
+  <div class="column">
+    <div class="label">⚙️ Gang-Manyue Source (96-Logic Extended)</div>
+    <textarea id="editor" spellcheck="false" oninput="compile()">-boot-
+; X86/64up 擴展指令集示範
+msg "EXTENDED ENGINE BOOT"
+
+; 繪製藍色背景與灰色區塊
+d 0 0 320 100 1
+d 0 100 320 200 8
+
+; 宣告變數
+v x = 160
+v y = 100
+v count = 0
+
+; 繪製多像素與循環
+pixel x, y, 14
+add count, 1
+check count 3
+  msg "COUNT REACHED 3"
+o
+
+; 使用鍵盤輸入
+ib
+pixel x, y, 12
+
+; 移動像素 (利用calc)
+calc x + 20
+pixel x, y, 10
+
+; 字串與記憶體操作
+msg "MEMORY COPY TEST"
+store 0x8000 "HELLO"
+tcopy 0x8000 0x8100
+load 0x8100
+msg "COPIED STRING"
+
+; 滑鼠指標
+mouse 140 90 15
+
+; 第二個滑鼠指標
+mouse 200 120 10
+
+stop</textarea>
+  </div>
+  <div class="column">
+    <div class="label">📟 NASM Assembly Output</div>
+    <div id="viewer"></div>
+  </div>
+</div>
+
+<script>
+  const editor = document.getElementById('editor');
+  const viewer = document.getElementById('viewer');
+  const mTag = document.getElementById('mTag');
+
+  function compile() {
+    const raw = editor.value;
+    const isB = raw.includes("-boot-");
+    
+    mTag.textContent = isB ? "MODE: BIOS BOOT (16-bit)" : "MODE: LINUX NATIVE (64-bit)";
+    mTag.className = "status-badge" + (isB ? " active-boot" : "");
+
+    let asm = [], data = [], vars = new Set();
+    let sC = 0;
+    let globalLabelId = 0;  // 統一的全局標籤計數器
+    let checkStack = [];     // check/o 配對堆疊
+
+    // 輔助函數：生成唯一全域標籤
+    function newLabel() {
+      globalLabelId++;
+      return globalLabelId;
+    }
+
+    // 基礎環境
+    if(isB) {
+      asm.push("[bits 16]", "[org 0x7c00]");
+      asm.push("mov ax, 0013h", "int 10h");
+      asm.push("push 0a000h", "pop es");
+      asm.push("xor ax, ax", "mov ds, ax");
+    } else {
+      asm.push("section .text", "global _start", "_start:");
+    }
+
+    const lines = raw.split('\n');
+    
+    lines.forEach((line) => {
+      let t = line.trim();
+      if (!t || t.startsWith(';') || t === '-boot-') return;
+      
+      let tok = t.split(/[\s,=+\-]+/).filter(x => x.length > 0);
+      if (tok.length === 0) return;
+      
+      let cmd = tok[0].toLowerCase();
+      
+      // ===== d 繪製矩形 =====
+      if (cmd === 'd') {
+        let [_, x1, y1, x2, y2, c] = tok;
+        let uid = newLabel();
+        asm.push(`; --- Draw Rect ${x1},${y1}-${x2},${y2} ---`);
+        asm.push(`    mov bx, ${y1}`);
+        asm.push(`_ly${uid}:`);
+        asm.push(`    mov cx, ${x1}`);
+        asm.push(`_lx${uid}:`);
+        asm.push(`    mov ax, bx`);
+        asm.push(`    imul ax, 320`);
+        asm.push(`    add ax, cx`);
+        asm.push(`    mov di, ax`);
+        asm.push(`    mov byte [es:di], ${c}`);
+        asm.push(`    inc cx`);
+        asm.push(`    cmp cx, ${x2}`);
+        asm.push(`    jl _lx${uid}`);
+        asm.push(`    inc bx`);
+        asm.push(`    cmp bx, ${y2}`);
+        asm.push(`    jl _ly${uid}`);
+      }
+      
+      // ===== msg 字串顯示 =====
+      else if (cmd === 'msg') {
+        let m = t.match(/"([^"]+)"/);
+        if (!m) return;
+        let str = m[1];
+        sC++;
+        if (isB) {
+          data.push(`_str${sC} db "${str}", 0`);
+          asm.push(`    mov si, _str${sC}`);
+          asm.push(`    call _print_str`);
+        } else {
+          data.push(`_str${sC} db "${str}", 10`);
+          data.push(`_str${sC}_len equ $ - _str${sC}`);
+          asm.push(`    mov rax, 1`);
+          asm.push(`    mov rdi, 1`);
+          asm.push(`    mov rsi, _str${sC}`);
+          asm.push(`    mov rdx, _str${sC}_len`);
+          asm.push(`    syscall`);
+        }
+      }
+      
+      // ===== v 變數宣告 =====
+      else if (cmd === 'v') {
+        let target = tok[1];
+        let val = tok[tok.length-1];
+        if (!['ax','bx','cx','dx','al','ah','rax','rbx','rcx','rdx'].includes(target.toLowerCase())) {
+          vars.add(target);
+          target = `[${target}]`;
+        }
+        asm.push(`    mov word ${target}, ${val}`);
+      }
+      
+      // ===== calc / add / sub =====
+      else if (cmd === 'calc' || cmd === 'add' || cmd === 'sub') {
+        let op = 'add';
+        if (cmd === 'sub') op = 'sub';
+        else if (cmd === 'calc') {
+          if (t.includes('-')) op = 'sub';
+          else op = 'add';
+        }
+        
+        let cTar = tok[1];
+        let val = tok[tok.length-1];
+        if (vars.has(cTar)) cTar = `[${cTar}]`;
+        asm.push(`    ${op} word ${cTar}, ${val}`);
+      }
+      
+      // ===== pixel 繪製點 =====
+      else if (cmd === 'pixel') {
+        let px = tok[1], py = tok[2], col = tok[3];
+        if (vars.has(px)) px = `[${px}]`;
+        if (vars.has(py)) py = `[${py}]`;
+        asm.push(`    ; pixel at ${px},${py} color ${col}`);
+        asm.push(`    mov ax, ${py}`);
+        asm.push(`    imul ax, 320`);
+        asm.push(`    add ax, ${px}`);
+        asm.push(`    mov di, ax`);
+        asm.push(`    mov byte [es:di], ${col}`);
+      }
+      
+      // ===== ib 鍵盤輸入 =====
+      else if (cmd === 'ib') {
+        if (isB) {
+          asm.push(`    ; wait for keypress`);
+          asm.push(`    mov ah, 00h`);
+          asm.push(`    int 16h`);
+        } else {
+          asm.push(`    mov rax, 0`);
+          asm.push(`    mov rdi, 0`);
+          asm.push(`    mov rsi, _kbdbuf`);
+          asm.push(`    mov rdx, 1`);
+          asm.push(`    syscall`);
+        }
+      }
+      
+      // ===== check 條件判斷 =====
+      else if (cmd === 'check') {
+        let cid = newLabel();
+        checkStack.push(cid);
+        let left = tok[1];
+        let right = tok[tok.length-1];
+        if (vars.has(left)) left = `[${left}]`;
+        asm.push(`    ; check ${left} == ${right}`);
+        asm.push(`    cmp word ${left}, ${right}`);
+        asm.push(`    jne _skip${cid}`);
+      }
+      
+      // ===== o 條件結束 =====
+      else if (cmd === 'o') {
+        let cid = checkStack.pop();
+        if (cid !== undefined) {
+          asm.push(`_skip${cid}:`);
+        }
+      }
+      
+      // ===== stop 終止 =====
+      else if (cmd === 'stop') {
+        if (isB) {
+          asm.push(`    ; halt`);
+          asm.push(`    jmp $`);
+        } else {
+          asm.push(`    mov rax, 60`);
+          asm.push(`    xor rdi, rdi`);
+          asm.push(`    syscall`);
+        }
+      }
+      
+      // ===== store addr "string" =====
+      else if (cmd === 'store') {
+        let addr = tok[1];
+        let m = t.match(/"([^"]+)"/);
+        if (!m) return;
+        let str = m[1];
+        sC++;
+        let slabel = `_store${sC}`;
+        data.push(`${slabel} db "${str}", 0`);
+        if (isB) {
+          asm.push(`    mov si, ${slabel}`);
+          asm.push(`    mov di, ${addr}`);
+          asm.push(`    call _strcpy`);
+        } else {
+          asm.push(`    mov rsi, ${slabel}`);
+          asm.push(`    mov rdi, ${addr}`);
+          asm.push(`    call _strcpy64`);
+        }
+      }
+      
+      // ===== tcopy src dest =====
+      else if (cmd === 'tcopy') {
+        let src = tok[1], dest = tok[2];
+        if (isB) {
+          asm.push(`    mov si, ${src}`);
+          asm.push(`    mov di, ${dest}`);
+          asm.push(`    call _strcpy`);
+        } else {
+          asm.push(`    mov rsi, ${src}`);
+          asm.push(`    mov rdi, ${dest}`);
+          asm.push(`    call _strcpy64`);
+        }
+      }
+      
+      // ===== load addr =====
+      else if (cmd === 'load') {
+        let addr = tok[1];
+        if (isB) {
+          asm.push(`    mov si, ${addr}`);
+          asm.push(`    call _print_str`);
+        } else {
+          asm.push(`    mov rsi, ${addr}`);
+          asm.push(`    call _print64`);
+        }
+      }
+      
+      // ===== mouse x y color =====
+      else if (cmd === 'mouse') {
+        let mx = tok[1], my = tok[2], mc = tok[3];
+        let mid = newLabel();
+        asm.push(`    ; mouse cross at ${mx},${my} color ${mc}`);
+        // 水平線
+        asm.push(`    mov ax, ${my}`);
+        asm.push(`    imul ax, 320`);
+        asm.push(`    add ax, ${mx}`);
+        asm.push(`    sub ax, 4`);
+        asm.push(`    mov di, ax`);
+        asm.push(`    mov cx, 9`);
+        asm.push(`_mh${mid}:`);
+        asm.push(`    mov byte [es:di], ${mc}`);
+        asm.push(`    inc di`);
+        asm.push(`    loop _mh${mid}`);
+        // 垂直線
+        asm.push(`    mov ax, ${my}`);
+        asm.push(`    sub ax, 4`);
+        asm.push(`    imul ax, 320`);
+        asm.push(`    add ax, ${mx}`);
+        asm.push(`    mov di, ax`);
+        asm.push(`    mov cx, 9`);
+        asm.push(`_mv${mid}:`);
+        asm.push(`    mov byte [es:di], ${mc}`);
+        asm.push(`    add di, 320`);
+        asm.push(`    loop _mv${mid}`);
+      }
+      
+      // ===== 其他 =====
+      else {
+        asm.push(`    ${t}`);
+      }
+    });
+
+    // ===== 輔助函式 =====
+    if (isB) {
+      asm.push(`; ===== BIOS Helper Routines =====`);
+      asm.push(`_print_str:`);
+      asm.push(`    lodsb`);
+      asm.push(`    or al, al`);
+      asm.push(`    jz _print_done`);
+      asm.push(`    mov ah, 0eh`);
+      asm.push(`    int 10h`);
+      asm.push(`    jmp _print_str`);
+      asm.push(`_print_done:`);
+      asm.push(`    ret`);
+      
+      asm.push(`_strcpy:`);
+      asm.push(`    push si`);
+      asm.push(`    push di`);
+      asm.push(`_strcpy_loop:`);
+      asm.push(`    lodsb`);
+      asm.push(`    stosb`);
+      asm.push(`    or al, al`);
+      asm.push(`    jnz _strcpy_loop`);
+      asm.push(`    pop di`);
+      asm.push(`    pop si`);
+      asm.push(`    ret`);
+    } else {
+      asm.push(`_strcpy64:`);
+      asm.push(`    push rsi`);
+      asm.push(`    push rdi`);
+      asm.push(`_strcpy64_loop:`);
+      asm.push(`    lodsb`);
+      asm.push(`    stosb`);
+      asm.push(`    test al, al`);
+      asm.push(`    jnz _strcpy64_loop`);
+      asm.push(`    pop rdi`);
+      asm.push(`    pop rsi`);
+      asm.push(`    ret`);
+      
+      asm.push(`_print64:`);
+      asm.push(`    push rsi`);
+      asm.push(`    mov rdi, rsi`);
+      asm.push(`    xor al, al`);
+      asm.push(`    mov rcx, -1`);
+      asm.push(`    repne scasb`);
+      asm.push(`    neg rcx`);
+      asm.push(`    sub rcx, 2`);
+      asm.push(`    mov rdx, rcx`);
+      asm.push(`    pop rsi`);
+      asm.push(`    mov rax, 1`);
+      asm.push(`    mov rdi, 1`);
+      asm.push(`    syscall`);
+      asm.push(`    ret`);
+    }
+
+    // ===== 變數與資料區 =====
+    let varDecls = Array.from(vars).map(v => `${v} dw 0`).join('\n');
+    
+    let result = asm.join('\n');
+    
+    if (isB) {
+      result += `\n; ===== Data Section =====\n`;
+      if (varDecls) result += `${varDecls}\n`;
+      if (data.length > 0) result += `${data.join('\n')}\n`;
+      result += `\ntimes 510-($-$$) db 0\ndw 0aa55h`;
+    } else {
+      result += `\nsection .data\n`;
+      result += `_kbdbuf db 0\n`;
+      if (varDecls) result += `${varDecls}\n`;
+      if (data.length > 0) result += `${data.join('\n')}\n`;
+    }
+    
+    viewer.textContent = result;
+  }
+
+  function downloadAsm() {
+    const blob = new Blob([viewer.textContent], {type: 'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'o.asm';
+    a.click();
+  }
+  
+  function copyCode() {
+    navigator.clipboard.writeText(viewer.textContent).then(() => {
+      alert('NASM 代碼已複製到剪貼簿！');
+    });
+  }
+
+  compile();
+</script>
+</body>
+</html>

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>X86/64up</title>
+  <style>
+    :root {
+      --bg: #0a0c0f;
+      --panel: #121418;
+      --acc: #00a6ff;
+      --boot: #ff4d6a;
+      --text: #dce2e9;
+      --border: #2a2f38;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Fira Code', monospace;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: var(--panel);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--border);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--acc);
+    }
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button {
+      background: #2a2e36;
+      color: #f0f0f0;
+      border: 1px solid #3e434c;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: var(--acc);
+      border-color: var(--acc);
+      color: #000;
+    }
+    .file-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      background: #0b0e12;
+      padding: 6px 12px 0 12px;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .file-tab {
+      background: #1e2128;
+      padding: 6px 16px;
+      border-radius: 8px 8px 0 0;
+      cursor: pointer;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      border-bottom: none;
+    }
+    .file-tab.active {
+      background: var(--acc);
+      color: #000;
+      border-color: var(--acc);
+      font-weight: bold;
+    }
+    .workspace {
+      display: flex;
+      flex: 1;
+      padding: 12px;
+      gap: 12px;
+      overflow: hidden;
+    }
+    .column {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      gap: 8px;
+      min-width: 0;
+    }
+    .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #8b95a5;
+      margin-left: 6px;
+    }
+    textarea, #viewer {
+      flex: 1;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      padding: 18px;
+      font-size: 14px;
+      line-height: 1.6;
+      background: #0b0e12;
+      resize: none;
+      white-space: pre-wrap;
+      overflow-y: auto;
+      font-family: monospace;
+    }
+    textarea { color: #c3f0c3; }
+    #viewer { color: #6cd4ff; background: #020304; white-space: pre; }
+    @media (max-width: 750px) { .workspace { flex-direction: column; } }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="logo">X86/64up</div>
+  <div class="toolbar">
+    <button onclick="recompileAll()">🔄 重新編譯</button>
+    <button onclick="downloadCurrentAsm()">📄 下載目前檔案</button>
+    <button onclick="downloadAllAsZip()">📦 下載全部 ZIP</button>
+  </div>
+</header>
+<div class="file-tabs" id="fileTabs"></div>
+<div class="workspace">
+  <div class="column">
+    <div class="label">✏️ 原始碼（使用 jf "檔名" 插入其他檔案）</div>
+    <textarea id="editor" spellcheck="false" oninput="onSourceChange()"></textarea>
+  </div>
+  <div class="column">
+    <div class="label">📟 NASM 輸出（目前選擇檔案）</div>
+    <div id="viewer"></div>
+  </div>
+</div>
+
+<script>
+  // 全域儲存所有檔案的原始碼
+  let allSources = new Map();
+  let files = [];
+  let currentFileIndex = 0;
+
+  const editor = document.getElementById('editor');
+  const viewer = document.getElementById('viewer');
+  const fileTabsDiv = document.getElementById('fileTabs');
+
+  // ---------- 編譯核心（支援 jf 指令）----------
+  function compileOneFile(source, filename, sourceMap) {
+    const isBoot = source.includes("-boot-");
+    let asm = [], data = [], vars = new Set();
+    let strCount = 0, globalLabelId = 0, checkStack = [];
+    const newLabel = () => ++globalLabelId;
+
+    const toMemOrReg = (name, varsSet, forWord) => {
+      if (!name) return name;
+      const upper = name.toUpperCase();
+      const isReg = /^(A[HLX]|B[HLX]|C[HLX]|D[HLX]|SI|DI|BP|SP|R[0-9]+[ABD]?|RAX|RBX|RCX|RDX|RSI|RDI|RBP|RSP|R8|R9|R10|R11|R12|R13|R14|R15)$/i.test(upper);
+      if (isReg) return name;
+      if (varsSet.has(name)) return forWord ? `word [${name}]` : `[${name}]`;
+      if (/^0x[0-9a-f]+$/i.test(name) || /^\d+$/.test(name)) return name;
+      return forWord ? `word [${name}]` : `[${name}]`;
+    };
+
+    // 遞迴展開 jf 指令
+    function expandJf(src, visited = new Set()) {
+      let output = [];
+      const lines = src.split('\n');
+      for (let line of lines) {
+        let t = line.trim();
+        // 匹配 jf "filename" 或 jf 'filename'
+        let jfMatch = t.match(/^jf\s+["']([^"']+)["']/i);
+        if (jfMatch) {
+          let targetFile = jfMatch[1];
+          if (visited.has(targetFile)) {
+            output.push(`; ERROR: Circular jf reference to ${targetFile}`);
+            continue;
+          }
+          if (sourceMap.has(targetFile)) {
+            visited.add(targetFile);
+            output.push(`; ----- jf "${targetFile}" -----`);
+            output.push(expandJf(sourceMap.get(targetFile), visited));
+            output.push(`; ----- end jf "${targetFile}" -----`);
+            visited.delete(targetFile);
+          } else {
+            output.push(`; ERROR: jf "${targetFile}" not found in any section`);
+          }
+          continue;
+        }
+        output.push(line);
+      }
+      return output.join('\n');
+    }
+
+    // 展開所有 jf 後得到完整原始碼
+    const expandedSource = expandJf(source);
+    
+    // 以下為原本的編譯邏輯（完整支援所有指令）
+    const lines = expandedSource.split('\n');
+    
+    if (isBoot) {
+      asm.push("[bits 16]", "[org 0x7c00]");
+      asm.push("mov ax, 0013h", "int 10h");
+      asm.push("push 0a000h", "pop es");
+      asm.push("xor ax, ax", "mov ds, ax");
+    } else {
+      asm.push("section .text", "global _start", "_start:");
+    }
+
+    for (let line of lines) {
+      let t = line.trim();
+      if (!t || t.startsWith(';') || t === '-boot-') continue;
+      let tok = t.split(/[\s,=+\-]+/).filter(x => x.length);
+      if (!tok.length) continue;
+      let cmd = tok[0].toLowerCase();
+
+      // d 矩形
+      if (cmd === 'd') {
+        if (!isBoot) { asm.push(`; SKIP: d not supported in 64-bit mode`); continue; }
+        let [_, x1, y1, x2, y2, c] = tok;
+        let uid = newLabel();
+        asm.push(`    mov bx, ${y1}`, `_ly${uid}:`, `    mov cx, ${x1}`, `_lx${uid}:`);
+        asm.push(`    mov ax, bx`, `    imul ax, 320`, `    add ax, cx`, `    mov di, ax`, `    mov byte [es:di], ${c}`);
+        asm.push(`    inc cx`, `    cmp cx, ${x2}`, `    jl _lx${uid}`, `    inc bx`, `    cmp bx, ${y2}`, `    jl _ly${uid}`);
+        continue;
+      }
+      // msg
+      if (cmd === 'msg') {
+        let m = t.match(/"([^"]+)"/);
+        if (!m) continue;
+        let str = m[1];
+        strCount++;
+        if (isBoot) {
+          data.push(`_str${strCount} db "${str}", 0`);
+          asm.push(`    mov si, _str${strCount}`, `    call _print_str`);
+        } else {
+          data.push(`_str${strCount} db "${str}", 10`);
+          data.push(`_str${strCount}_len equ $ - _str${strCount}`);
+          asm.push(`    mov rax, 1`, `    mov rdi, 1`, `    mov rsi, _str${strCount}`, `    mov rdx, _str${strCount}_len`, `    syscall`);
+        }
+        continue;
+      }
+      // v 變數
+      if (cmd === 'v') {
+        let target = tok[1], val = tok[tok.length-1];
+        let upperTarget = target.toUpperCase();
+        let isReg = /^(A[HLX]|B[HLX]|C[HLX]|D[HLX]|SI|DI|BP|SP|R[0-9]+[ABD]?|RAX|RBX|RCX|RDX|RSI|RDI|RBP|RSP|R8|R9|R10|R11|R12|R13|R14|R15)$/i.test(upperTarget);
+        if (isReg) {
+          asm.push(`    mov ${target}, ${val}`);
+        } else {
+          vars.add(target);
+          asm.push(`    mov word [${target}], ${val}`);
+        }
+        continue;
+      }
+      // calc / add / sub
+      if (cmd === 'calc' || cmd === 'add' || cmd === 'sub') {
+        let op = (cmd === 'sub') ? 'sub' : 'add';
+        if (cmd === 'calc') op = t.includes('-') ? 'sub' : 'add';
+        let dest = tok[1], src = tok[tok.length-1];
+        let destOp = toMemOrReg(dest, vars, true);
+        let srcOp = toMemOrReg(src, vars, false);
+        if (srcOp !== src && srcOp.includes('[')) {
+          asm.push(`    mov ax, ${srcOp}`, `    ${op} ${destOp}, ax`);
+        } else {
+          asm.push(`    ${op} ${destOp}, ${srcOp}`);
+        }
+        continue;
+      }
+      // pixel
+      if (cmd === 'pixel') {
+        if (!isBoot) { asm.push(`; SKIP: pixel in 64-bit mode`); continue; }
+        let px = tok[1], py = tok[2], col = tok[3];
+        let pxOp = toMemOrReg(px, vars, false);
+        let pyOp = toMemOrReg(py, vars, false);
+        asm.push(`    mov ax, ${pyOp}`, `    imul ax, 320`, `    add ax, ${pxOp}`, `    mov di, ax`, `    mov byte [es:di], ${col}`);
+        continue;
+      }
+      // ib
+      if (cmd === 'ib') {
+        if (isBoot) asm.push(`    mov ah, 00h`, `    int 16h`);
+        else asm.push(`    mov rax, 0`, `    mov rdi, 0`, `    mov rsi, _kbdbuf`, `    mov rdx, 1`, `    syscall`);
+        continue;
+      }
+      // check / o
+      if (cmd === 'check') {
+        let cid = newLabel();
+        checkStack.push(cid);
+        let left = tok[1], right = tok[tok.length-1];
+        let leftOp = toMemOrReg(left, vars, true);
+        let rightOp = toMemOrReg(right, vars, false);
+        asm.push(`    cmp ${leftOp}, ${rightOp}`, `    jne _skip${cid}`);
+        continue;
+      }
+      if (cmd === 'o') {
+        let cid = checkStack.pop();
+        if (cid !== undefined) asm.push(`_skip${cid}:`);
+        continue;
+      }
+      // stop
+      if (cmd === 'stop') {
+        if (isBoot) asm.push(`    jmp $`);
+        else asm.push(`    mov rax, 60`, `    xor rdi, rdi`, `    syscall`);
+        continue;
+      }
+      // store
+      if (cmd === 'store') {
+        let addr = tok[1];
+        let m = t.match(/"([^"]+)"/);
+        if (!m) continue;
+        let str = m[1];
+        strCount++;
+        let slabel = `_store${strCount}`;
+        data.push(`${slabel} db "${str}", 0`);
+        let destAddr = vars.has(addr) ? addr : toMemOrReg(addr, vars, false);
+        if (isBoot) asm.push(`    mov si, ${slabel}`, `    mov di, ${destAddr}`, `    call _strcpy`);
+        else asm.push(`    mov rsi, ${slabel}`, `    mov rdi, ${destAddr}`, `    call _strcpy64`);
+        continue;
+      }
+      // tcopy
+      if (cmd === 'tcopy') {
+        let src = tok[1], dest = tok[2];
+        let srcAddr = vars.has(src) ? src : toMemOrReg(src, vars, false);
+        let destAddr = vars.has(dest) ? dest : toMemOrReg(dest, vars, false);
+        if (isBoot) asm.push(`    mov si, ${srcAddr}`, `    mov di, ${destAddr}`, `    call _strcpy`);
+        else asm.push(`    mov rsi, ${srcAddr}`, `    mov rdi, ${destAddr}`, `    call _strcpy64`);
+        continue;
+      }
+      // load
+      if (cmd === 'load') {
+        let addr = tok[1];
+        let finalAddr = vars.has(addr) ? addr : toMemOrReg(addr, vars, false);
+        if (isBoot) asm.push(`    mov si, ${finalAddr}`, `    call _print_str`);
+        else asm.push(`    mov rsi, ${finalAddr}`, `    call _print64`);
+        continue;
+      }
+      // mouse
+      if (cmd === 'mouse') {
+        if (!isBoot) { asm.push(`; SKIP: mouse in 64-bit mode`); continue; }
+        let mx = tok[1], my = tok[2], mc = tok[3];
+        let mid = newLabel();
+        asm.push(`    mov ax, ${my}`, `    imul ax, 320`, `    add ax, ${mx}`, `    sub ax, 4`, `    mov di, ax`, `    mov cx, 9`);
+        asm.push(`_mh${mid}:`, `    mov byte [es:di], ${mc}`, `    inc di`, `    loop _mh${mid}`);
+        asm.push(`    mov ax, ${my}`, `    sub ax, 4`, `    imul ax, 320`, `    add ax, ${mx}`, `    mov di, ax`, `    mov cx, 9`);
+        asm.push(`_mv${mid}:`, `    mov byte [es:di], ${mc}`, `    add di, 320`, `    loop _mv${mid}`);
+        continue;
+      }
+      // 未知指令
+      asm.push(`    ; UNKNOWN: ${t}`);
+    }
+
+    // 輔助常式
+    if (isBoot) {
+      asm.push(``, `_print_str:`, `    lodsb`, `    or al, al`, `    jz .done`, `    mov ah, 0eh`, `    int 10h`, `    jmp _print_str`, `.done: ret`);
+      asm.push(`_strcpy:`, `    push si`, `    push di`, `_strcpy_loop:`, `    lodsb`, `    stosb`, `    or al, al`, `    jnz _strcpy_loop`, `    pop di`, `    pop si`, `    ret`);
+      asm.push(``, `; ----- Data -----`);
+      for (let v of vars) asm.push(`${v} dw 0`);
+      if (data.length) asm.push(...data);
+      asm.push(``);
+      asm.push(`%if ($-$$) > 510`);
+      asm.push(`    %error "Boot sector code exceeds 510 bytes"`);
+      asm.push(`%else`);
+      asm.push(`    times 510-($-$$) db 0`);
+      asm.push(`    dw 0aa55h`);
+      asm.push(`%endif`);
+    } else {
+      asm.push(``, `_strcpy64:`, `    push rsi`, `    push rdi`, `_strcpy64_loop:`, `    lodsb`, `    stosb`, `    test al, al`, `    jnz _strcpy64_loop`, `    pop rdi`, `    pop rsi`, `    ret`);
+      asm.push(`_print64:`, `    push rsi`, `    mov rdi, rsi`, `    xor al, al`, `    mov rcx, -1`, `    repne scasb`, `    neg rcx`, `    sub rcx, 2`, `    mov rdx, rcx`, `    pop rsi`, `    mov rax, 1`, `    mov rdi, 1`, `    syscall`, `    ret`);
+      asm.push(``, `section .data`);
+      asm.push(`_kbdbuf db 0`);
+      for (let v of vars) asm.push(`${v} dw 0`);
+      if (data.length) asm.push(...data);
+    }
+    return asm.join('\n');
+  }
+
+  // 解析多檔案語法
+  function parseMultiFile(sourceText) {
+    const lines = sourceText.split(/\r?\n/);
+    const filesMap = new Map();
+    let currentFile = null;
+    let currentLines = [];
+    for (let line of lines) {
+      const match = line.match(/^---分隔\s+([^\s]+)\s+分隔---$/);
+      if (match) {
+        if (currentFile) filesMap.set(currentFile, currentLines.join('\n').trim());
+        currentFile = match[1];
+        currentLines = [];
+        continue;
+      }
+      if (currentFile !== null) currentLines.push(line);
+      else {
+        if (!currentFile) currentFile = "main.asm";
+        currentLines.push(line);
+      }
+    }
+    if (currentFile && (currentLines.length > 0 || filesMap.size === 0)) {
+      filesMap.set(currentFile, currentLines.join('\n').trim());
+    }
+    if (filesMap.size === 0 && sourceText.trim() !== "") filesMap.set("o.asm", sourceText.trim());
+    return filesMap;
+  }
+
+  function recompileAll() {
+    const filesMap = parseMultiFile(editor.value);
+    allSources = filesMap;
+    files = [];
+    for (let [name, src] of filesMap.entries()) {
+      files.push({ name, asm: compileOneFile(src, name, filesMap) });
+    }
+    if (files.length === 0) files.push({ name: "o.asm", asm: "; No content" });
+    if (currentFileIndex >= files.length) currentFileIndex = 0;
+    renderTabs();
+    showCurrentFile();
+  }
+
+  function renderTabs() {
+    fileTabsDiv.innerHTML = '';
+    files.forEach((file, idx) => {
+      const tab = document.createElement('div');
+      tab.className = 'file-tab' + (idx === currentFileIndex ? ' active' : '');
+      tab.textContent = file.name;
+      tab.onclick = () => { currentFileIndex = idx; renderTabs(); showCurrentFile(); };
+      fileTabsDiv.appendChild(tab);
+    });
+  }
+
+  function showCurrentFile() {
+    if (files.length) viewer.textContent = files[currentFileIndex].asm;
+  }
+
+  function onSourceChange() { recompileAll(); }
+  function downloadCurrentAsm() {
+    if (!files.length) return;
+    const file = files[currentFileIndex];
+    const blob = new Blob([file.asm], {type: 'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function downloadAllAsZip() {
+    const zip = new JSZip();
+    for (const f of files) zip.file(f.name, f.asm);
+    zip.generateAsync({type: 'blob'}).then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'source_pack.zip';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }
+
+  // 預設範例：展示 jf "k.asm" 指令
+  const defaultSource = `---分隔 boot.asm 分隔---
+-boot-
+msg "===== BOOT START ====="
+msg "Calling kernel..."
+
+jf "k.asm"
+
+msg "Returned from kernel"
+stop
+
+---分隔 k.asm 分隔---
+msg ">>> INSIDE KERNEL <<<"
+v counter = 0
+add counter, 1
+msg "Kernel work done"
+`;
+
+  editor.value = defaultSource;
+  recompileAll();
+</script>
+</body>
+</html>
